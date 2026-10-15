@@ -37,6 +37,7 @@ test("client demand is assigned to nearest AP and utilization uses configured ca
   assert.equal(result.utilizationPercent, 15);
   assert.deepEqual(result.accessPoints.map((ap) => ap.clientCount), [1, 1]);
   assert.deepEqual(result.accessPoints.map((ap) => ap.demandMbps), [12, 24]);
+  assert.equal(result.accessPoints[0].averageSignalDbm, result.users[0].rssiDbm);
   assert.deepEqual(result.users.map((user) => user.apId), ["AP-01", "AP-02"]);
 });
 
@@ -76,4 +77,20 @@ test("AP utilization reports busy and overloaded conditions", () => {
   assert.equal(result.utilizationPercent, 110);
   assert.equal(result.condition, "congested");
   assert.equal(result.accessPoints[0].condition, "congested");
+});
+
+test("condition reflects an overloaded AP even when aggregate utilization is low", () => {
+  const result = calculateMetrics([
+    { id: 1, name: "Client", x: 10, y: 10, demandMbps: 12 }
+  ], [
+    { id: "AP-01", name: "Loaded", x: 10, y: 10, capacityMbps: 10.21 },
+    { id: "AP-02", name: "Idle", x: 90, y: 90, capacityMbps: 120 },
+    { id: "AP-03", name: "Idle", x: 90, y: 10, capacityMbps: 120 },
+    { id: "AP-04", name: "Idle", x: 10, y: 90, capacityMbps: 120 }
+  ]);
+
+  assert.equal(result.accessPoints[0].utilizationPercent, 117.5);
+  assert.equal(result.utilizationPercent, 3.2);
+  assert.equal(result.busiestAccessPointUtilizationPercent, 117.5);
+  assert.equal(result.condition, "congested");
 });

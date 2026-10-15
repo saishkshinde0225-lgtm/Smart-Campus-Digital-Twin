@@ -165,10 +165,14 @@ h2 { margin: 0; font-size: 15px; letter-spacing: -.01em; }
 .history-chart { display: block; width: 100%; height: 105px; overflow: visible; }
 .history-chart:empty { display: none; }
 .history-chart .chart-grid { stroke: #e7ecee; stroke-width: 1; }
+.history-chart .chart-axis { stroke: #aab8be; stroke-width: 1; }
 .history-chart .chart-line { fill: none; stroke: #176b87; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .history-chart .chart-point { fill: white; stroke: #176b87; stroke-width: 2; }
 .history-chart .chart-label { fill: #829098; font-size: 10px; }
-.history-labels { display: flex; justify-content: space-between; color: #89969c; font-size: 8px; }
+.history-labels { display: flex; justify-content: space-between; gap: 4px; color: #89969c; font-size: 8px; }
+.history-labels span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.history-labels span:nth-child(2) { text-align: center; }
+.history-labels span:last-child { text-align: right; }
 .chart-caption { margin: 8px 0 0; color: #859198; font-size: 8px; line-height: 1.4; }
 .footnote { padding: 14px 0 0; color: #89969c; font-size: 9px; }
 

@@ -8,12 +8,26 @@ const { MySqlRepository } = require("../database");
 
 test("snapshot MySQL queries escape the reserved condition alias and preserve response keys", async () => {
   const queries = [];
+  const storedSnapshots = [];
   const pool = {
     async getConnection() {
       return {
         async beginTransaction() {},
         async execute(sql, parameters) {
           queries.push({ sql, parameters });
+          if (sql.includes("INSERT INTO simulation_snapshots")) {
+            storedSnapshots.push({
+              id: 17,
+              userCount: parameters[1],
+              connectedUserCount: parameters[2],
+              totalDemandMbps: parameters[3],
+              totalCapacityMbps: parameters[4],
+              utilizationPercent: parameters[5],
+              averageSignalDbm: parameters[6],
+              condition: parameters[7],
+              recordedAt: "2026-10-16T00:00:00.000Z"
+            });
+          }
           return [{ insertId: 17 }];
         },
         async commit() {},
@@ -24,40 +38,20 @@ test("snapshot MySQL queries escape the reserved condition alias and preserve re
     async execute(sql, parameters) {
       queries.push({ sql, parameters });
       if (sql.includes("WHERE id = ?")) {
-        return [[{
-          id: 17,
-          userCount: 2,
-          connectedUserCount: 2,
-          totalDemandMbps: 24,
-          totalCapacityMbps: 240,
-          utilizationPercent: 10,
-          averageSignalDbm: -60,
-          condition: "normal",
-          recordedAt: "2026-10-16T00:00:00.000Z"
-        }]];
+        return [[storedSnapshots[0]]];
       }
-      return [[{
-        id: 17,
-        userCount: 2,
-        connectedUserCount: 2,
-        totalDemandMbps: 24,
-        totalCapacityMbps: 240,
-        utilizationPercent: 10,
-        averageSignalDbm: -60,
-        condition: "normal",
-        recordedAt: "2026-10-16T00:00:00.000Z"
-      }]];
+      return [[...storedSnapshots]];
     }
   };
   const repository = new MySqlRepository(pool);
   const metrics = {
     userCount: 2,
     connectedUserCount: 2,
-    totalDemandMbps: 24,
+    totalDemandMbps: 282,
     totalCapacityMbps: 240,
-    utilizationPercent: 10,
+    utilizationPercent: 117.5,
     averageSignalDbm: -60,
-    condition: "normal",
+    condition: "congested",
     accessPoints: []
   };
 
@@ -67,8 +61,12 @@ test("snapshot MySQL queries escape the reserved condition alias and preserve re
 
   assert.equal(snapshotQueries.length, 2);
   assert.ok(snapshotQueries.every(({ sql }) => sql.includes("condition_name AS `condition`")));
-  assert.equal(saved.condition, "normal");
-  assert.equal(history[0].condition, "normal");
+  assert.equal(saved.condition, "congested");
+  assert.equal(saved.utilizationPercent, 117.5);
+  assert.equal(history[0].utilizationPercent, 117.5);
+  assert.equal(storedSnapshots[0].utilizationPercent, 117.5);
+  assert.equal(history[0].condition, "congested");
+  assert.match(snapshotQueries[1].sql, /ORDER BY created_at DESC, id DESC LIMIT \?/);
 });
 
 async function withServer(callback) {
@@ -119,11 +117,14 @@ test("REST user add, move, remove, and reset persist timestamped calculated snap
     result = await jsonRequest(baseUrl, `/api/users/${result.payload.user.id}/position`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ x: 80, y: 80 })
+      body: JSON.stringify({ x: 80, y: 60 })
     });
     assert.equal(result.response.status, 200);
     assert.equal(result.payload.user.apId, "AP-02");
-    assert.deepEqual([repository.users[0].x, repository.users[0].y], [80, 80]);
+    assert.equal(result.payload.user.rssiDbm, -76);
+    assert.deepEqual([repository.users[0].x, repository.users[0].y], [80, 60]);
+    assert.deepEqual(result.payload.metrics.accessPoints.map((ap) => ap.clientCount), [0, 1]);
+    assert.equal(result.payload.metrics.accessPoints[1].averageSignalDbm, -76);
 
     const reloadedState = await jsonRequest(baseUrl, "/api/metrics");
     assert.equal(reloadedState.payload.users[0].name, "Learner");
@@ -157,6 +158,42 @@ test("campus and AP configuration updates are validated and persisted", async ()
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: "Engineering Campus", defaultDemandMbps: 18 })
+    });
+
+    test("over-capacity AP utilization and timestamped snapshots remain uncapped in history", async () => {
+      await withServer(async (baseUrl, repository) => {
+        for (const position of [{ x: 20, y: 20 }, { x: 80, y: 80 }]) {
+          const client = await jsonRequest(baseUrl, "/api/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: "Load test", ...position, demandMbps: 12 })
+          });
+          assert.equal(client.response.status, 201);
+        }
+
+        let overloaded;
+        for (const id of ["AP-01", "AP-02"]) {
+          overloaded = await jsonRequest(baseUrl, `/api/access-points/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ capacityMbps: 10.21 })
+          });
+        }
+        assert.equal(overloaded.response.status, 200);
+        assert.equal(overloaded.payload.metrics.accessPoints[0].utilizationPercent, 117.5);
+        assert.equal(overloaded.payload.metrics.accessPoints[1].utilizationPercent, 117.5);
+        assert.equal(overloaded.payload.metrics.utilizationPercent, 117.5);
+        assert.equal(overloaded.payload.metrics.busiestAccessPointUtilizationPercent, 117.5);
+        assert.equal(overloaded.payload.metrics.condition, "congested");
+
+        const history = await jsonRequest(baseUrl, "/api/simulation/history?limit=10");
+        assert.equal(history.payload.length, 4);
+        assert.equal(history.payload[3].utilizationPercent, 117.5);
+        assert.ok(new Date(history.payload[0].recordedAt) <= new Date(history.payload[3].recordedAt));
+        await jsonRequest(baseUrl, "/api/simulation/history?limit=10");
+        await jsonRequest(baseUrl, "/api/metrics");
+        assert.equal(repository.history.length, 4);
+      });
     });
     assert.equal(result.response.status, 200);
     assert.equal(repository.campus.name, "Engineering Campus");

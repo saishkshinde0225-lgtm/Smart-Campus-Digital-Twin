@@ -173,7 +173,7 @@ class MySqlRepository {
 
   async getSnapshotHistory(limit) {
     const [rows] = await this.pool.execute(
-      "SELECT id, user_count AS userCount, connected_user_count AS connectedUserCount, total_demand_mbps AS totalDemandMbps, total_capacity_mbps AS totalCapacityMbps, utilization_percent AS utilizationPercent, average_signal_dbm AS averageSignalDbm, condition_name AS `condition`, created_at AS recordedAt FROM simulation_snapshots WHERE campus_id = ? ORDER BY id DESC LIMIT ?",
+      "SELECT id, user_count AS userCount, connected_user_count AS connectedUserCount, total_demand_mbps AS totalDemandMbps, total_capacity_mbps AS totalCapacityMbps, utilization_percent AS utilizationPercent, average_signal_dbm AS averageSignalDbm, condition_name AS `condition`, created_at AS recordedAt FROM simulation_snapshots WHERE campus_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
       ["main-campus", limit]
     );
     return rows.reverse();

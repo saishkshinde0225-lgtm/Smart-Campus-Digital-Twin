@@ -28,6 +28,7 @@ const elements = {
   detailApClients: document.getElementById("detailApClients"),
   detailApUtilization: document.getElementById("detailApUtilization"),
   detailApCapacity: document.getElementById("detailApCapacity"),
+  detailApSignal: document.getElementById("detailApSignal"),
   detailApPosition: document.getElementById("detailApPosition"),
   addStudentButton: document.getElementById("addStudentButton"),
   removeStudentButton: document.getElementById("removeStudentButton"),
@@ -122,7 +123,7 @@ function renderDashboard() {
     ? "No simulated client traffic"
     : metrics.connectedUserCount === 0
       ? "All clients outside modeled coverage"
-      : "Based on aggregate AP utilization";
+      : `Busiest AP: ${formatNumber(metrics.busiestAccessPointUtilizationPercent)}%`;
   elements.addStudentButton.disabled = metrics.userCount >= campus.maxUsers;
   elements.removeStudentButton.disabled = state.selectedUserId === null;
 
@@ -239,6 +240,9 @@ function renderSelection(metrics) {
     elements.detailApClients.textContent = `${selectedAp.clientCount}`;
     elements.detailApUtilization.textContent = `${formatNumber(selectedAp.utilizationPercent)}% · ${capitalize(selectedAp.condition)}`;
     elements.detailApCapacity.textContent = `${formatNumber(selectedAp.demandMbps)} / ${formatNumber(selectedAp.capacityMbps)} Mbps`;
+    elements.detailApSignal.textContent = selectedAp.averageSignalDbm === null
+      ? "No connected clients"
+      : `${selectedAp.averageSignalDbm} dBm average`;
     elements.detailApPosition.textContent = `${formatNumber(selectedAp.x)}, ${formatNumber(selectedAp.y)}`;
     elements.mapHint.textContent = `${selectedAp.id} selected · estimated coverage shown on map`;
     return;
@@ -257,9 +261,14 @@ function renderHistory(history) {
   }
 
   const points = history.slice(-24);
-  const maximum = Math.max(100, ...points.map((item) => Number(item.utilizationPercent)));
+  const values = points.map((item) => Number(item.utilizationPercent));
+  const maximum = Math.max(100, ...values);
   const ceiling = Math.ceil(maximum / 25) * 25 || 100;
-  const padding = { left: 38, right: 9, top: 9, bottom: 22 };
+  const timestamps = points.map((point) => new Date(point.recordedAt).getTime());
+  const earliest = Math.min(...timestamps);
+  const latest = Math.max(...timestamps);
+  const duration = latest - earliest;
+  const padding = { left: 42, right: 14, top: 9, bottom: 38 };
   const width = 720;
   const height = 170;
   const chartWidth = width - padding.left - padding.right;
@@ -278,13 +287,19 @@ function renderHistory(history) {
     elements.historyChart.append(label);
   });
 
+  const axisY = padding.top + chartHeight;
+  elements.historyChart.append(svgElement("line", {
+    x1: padding.left, y1: axisY, x2: width - padding.right, y2: axisY, class: "chart-axis"
+  }));
   const coordinates = points.map((point, index) => {
-    const x = points.length === 1
-      ? padding.left + chartWidth
-      : padding.left + chartWidth * index / (points.length - 1);
-    const value = Math.max(0, Number(point.utilizationPercent));
-    const y = padding.top + chartHeight * (1 - Math.min(value, ceiling) / ceiling);
-    return { x, y, point, value };
+    const value = Number(point.utilizationPercent);
+    const timestamp = timestamps[index];
+    const timePosition = duration > 0
+      ? (timestamp - earliest) / duration
+      : points.length > 1 ? index / (points.length - 1) : 0.5;
+    const x = padding.left + chartWidth * timePosition;
+    const y = padding.top + chartHeight * (1 - Math.max(0, value) / ceiling);
+    return { x, y, point, timestamp, value };
   });
   const line = svgElement("polyline", {
     points: coordinates.map(({ x, y }) => `${x},${y}`).join(" "),
@@ -300,15 +315,20 @@ function renderHistory(history) {
       class: "chart-point"
     });
     const title = svgElement("title");
-    title.textContent = `${formatDate(coordinate.point.recordedAt)}: ${formatNumber(coordinate.value)}% utilization`;
+    title.textContent = `${formatTimestamp(coordinate.point.recordedAt)}: ${formatNumber(coordinate.value)}% utilization`;
     circle.append(title);
     elements.historyChart.append(circle);
   }
 
   elements.historyCurrent.textContent = `${formatNumber(Number(points[points.length - 1].utilizationPercent))}%`;
   elements.historyEmpty.hidden = true;
-  elements.historyLabels.firstElementChild.textContent = formatDate(points[0].recordedAt);
-  elements.historyLabels.lastElementChild.textContent = formatDate(points[points.length - 1].recordedAt);
+  const axisLabels = elements.historyLabels.children;
+  const labelPositions = [0, 0.5, 1];
+  labelPositions.forEach((fraction, index) => {
+    const labelTime = earliest + duration * fraction;
+    axisLabels[index].textContent = formatTimestamp(labelTime, duration >= 86400000);
+    axisLabels[index].title = new Date(labelTime).toLocaleString();
+  });
 }
 
 function beginDrag(event, user) {
@@ -428,11 +448,13 @@ function formatNumber(value) {
   return Number(value).toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
-function formatDate(value) {
-  const date = new Date(value);
+function formatTimestamp(value, includeDate = false) {
+  const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime())
     ? String(value)
-    : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    : includeDate
+      ? date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+      : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 function capitalize(value) {

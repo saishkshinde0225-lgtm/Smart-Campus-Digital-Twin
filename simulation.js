@@ -33,6 +33,7 @@ function calculateMetrics(users, accessPoints) {
   const accessPointMetrics = accessPoints.map((ap) => ({
     ...ap,
     clientCount: 0,
+    signalTotalDbm: 0,
     demandMbps: 0,
     utilizationPercent: 0,
     condition: "available"
@@ -58,6 +59,7 @@ function calculateMetrics(users, accessPoints) {
 
     if (connected) {
       ap.clientCount += 1;
+      ap.signalTotalDbm += signal.rssiDbm;
       ap.demandMbps += Number(user.demandMbps);
     }
 
@@ -79,6 +81,10 @@ function calculateMetrics(users, accessPoints) {
     ap.capacityMbps = Number(ap.capacityMbps);
     ap.x = Number(ap.x);
     ap.y = Number(ap.y);
+    ap.averageSignalDbm = ap.clientCount
+      ? Math.round(ap.signalTotalDbm / ap.clientCount)
+      : null;
+    delete ap.signalTotalDbm;
     ap.demandMbps = Number(ap.demandMbps.toFixed(2));
     ap.utilizationPercent = ap.capacityMbps > 0
       ? Number((100 * ap.demandMbps / ap.capacityMbps).toFixed(1))
@@ -96,6 +102,10 @@ function calculateMetrics(users, accessPoints) {
   const utilizationPercent = totalCapacityMbps > 0
     ? Number((100 * totalDemandMbps / totalCapacityMbps).toFixed(1))
     : 0;
+  const busiestAccessPointUtilizationPercent = accessPointMetrics.reduce(
+    (maximum, ap) => Math.max(maximum, ap.utilizationPercent),
+    0
+  );
   const averageSignalDbm = connectedUsers.length
     ? Math.round(connectedUsers.reduce((sum, user) => sum + user.rssiDbm, 0) / connectedUsers.length)
     : null;
@@ -108,9 +118,10 @@ function calculateMetrics(users, accessPoints) {
     totalCapacityMbps: Number(totalCapacityMbps.toFixed(2)),
     utilizationPercent,
     averageSignalDbm,
-    condition: utilizationPercent >= 100
+    busiestAccessPointUtilizationPercent,
+    condition: busiestAccessPointUtilizationPercent >= 100
       ? "congested"
-      : utilizationPercent >= 70
+      : busiestAccessPointUtilizationPercent >= 70
         ? "busy"
         : "normal",
     users: measuredUsers,
