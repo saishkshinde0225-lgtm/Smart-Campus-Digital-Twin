@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f6f8">
+  <title>Wireless Network Digital Twin | Smart Campus</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/script.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Smart Campus Digital Twin home">
+      <span class="brand-mark" aria-hidden="true">◉</span>
+      <span><strong>SMART CAMPUS</strong><small>WIRELESS NETWORK DIGITAL TWIN</small></span>
+    </a>
+    <div class="header-meta">
+      <span class="simulation-tag"><span class="status-dot"></span> SOFTWARE SIMULATION</span>
+      <span id="serverStatus" class="server-status" role="status">Connecting…</span>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section class="page-heading">
+      <div>
+        <p class="eyebrow">NETWORK OPERATIONS / LIVE MODEL</p>
+        <h1 id="campusTitle">Campus network</h1>
+        <p class="subheading">Estimated wireless coverage and simulated client demand. Not live hardware telemetry.</p>
+      </div>
+      <button id="resetButton" class="button button-quiet" type="button">Reset simulation</button>
+    </section>
+
+    <section class="metrics-row" aria-label="Network summary">
+      <article class="metric">
+        <span class="metric-label">CONNECTED STUDENTS</span>
+        <strong id="connectedCount">—</strong>
+        <span id="studentCountNote" class="metric-note">Loading saved state</span>
+      </article>
+      <article class="metric">
+        <span class="metric-label">ACCESS POINTS</span>
+        <strong id="apCount">—</strong>
+        <span class="metric-note">Configured campus radios</span>
+      </article>
+      <article class="metric metric-load">
+        <span class="metric-label">AGGREGATE UTILIZATION</span>
+        <strong id="networkUtilization">—</strong>
+        <span id="networkDemand" class="metric-note">Simulated Mbps / capacity</span>
+      </article>
+      <article class="metric metric-condition">
+        <span class="metric-label">NETWORK CONDITION</span>
+        <strong id="networkCondition">—</strong>
+        <span id="conditionNote" class="metric-note">Based on AP load</span>
+      </article>
+    </section>
+
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+    <div class="workspace">
+      <section class="map-panel panel">
+        <div class="panel-heading map-heading">
+          <div>
+            <p class="eyebrow">CAMPUS OVERVIEW</p>
+            <h2>Wireless coverage map</h2>
+            <p class="panel-subtitle">Select an access point or student for details. Drag students to simulate movement.</p>
+          </div>
+          <div class="map-legend" aria-label="Map legend">
+            <span><i class="legend-ap"></i> Access point</span>
+            <span><i class="legend-student"></i> Connected student</span>
+            <span><i class="legend-weak"></i> Weak / disconnected</span>
+          </div>
+        </div>
+
+        <div id="campusMap" class="campus-map" aria-label="Interactive campus map; click to place a student">
+          <div class="map-grid" aria-hidden="true"></div>
+          <div class="road road-horizontal" aria-hidden="true"></div>
+          <div class="road road-vertical" aria-hidden="true"></div>
+          <div class="courtyard" aria-hidden="true"><span>QUAD</span></div>
+          <div class="building building-science"><strong>SCIENCE</strong><span>Teaching &amp; labs</span></div>
+          <div class="building building-library"><strong>LIBRARY</strong><span>Learning commons</span></div>
+          <div class="building building-dining"><strong>DINING HALL</strong><span>Student services</span></div>
+          <div class="building building-engineering"><strong>ENGINEERING</strong><span>Research block</span></div>
+          <div class="building building-sports"><strong>SPORTS CENTRE</strong></div>
+          <div id="mapNodes" class="map-nodes"></div>
+          <div class="map-scale" aria-hidden="true"><span>0</span><i></i><span>100 map units</span></div>
+        </div>
+        <div class="map-footer">
+          <span id="mapHint">Click an open area to place a student, or use the controls.</span>
+          <span>Coordinates: normalized campus units (0–100)</span>
+        </div>
+      </section>
+
+      <aside class="side-column">
+        <section class="panel detail-panel" aria-labelledby="detailHeading">
+          <div class="panel-heading compact-heading">
+            <div><p class="eyebrow">SELECTION</p><h2 id="detailHeading">Network details</h2></div>
+          </div>
+          <div id="emptySelection" class="empty-state">
+            <span class="empty-symbol" aria-hidden="true">⌖</span>
+            <p>Select a student or access point on the map.</p>
+          </div>
+          <div id="studentDetails" class="detail-content" hidden>
+            <div class="detail-title"><span class="detail-icon student-icon">S</span><div><strong id="detailStudentName">—</strong><small>SIMULATED CLIENT</small></div></div>
+            <dl class="detail-list">
+              <div><dt>Connection</dt><dd id="detailConnection">—</dd></div>
+              <div><dt>Nearest AP</dt><dd id="detailNearestAp">—</dd></div>
+              <div><dt>Estimated signal</dt><dd id="detailSignal">—</dd></div>
+              <div><dt>Distance</dt><dd id="detailDistance">—</dd></div>
+              <div><dt>Position</dt><dd id="detailPosition">—</dd></div>
+              <div><dt>Traffic demand</dt><dd id="detailDemand">—</dd></div>
+            </dl>
+          </div>
+          <div id="apDetails" class="detail-content" hidden>
+            <div class="detail-title"><span class="detail-icon ap-icon">AP</span><div><strong id="detailApName">—</strong><small>SIMULATED RADIO</small></div></div>
+            <dl class="detail-list">
+              <div><dt>Clients</dt><dd id="detailApClients">—</dd></div>
+              <div><dt>Utilization</dt><dd id="detailApUtilization">—</dd></div>
+              <div><dt>Demand / capacity</dt><dd id="detailApCapacity">—</dd></div>
+              <div><dt>Map position</dt><dd id="detailApPosition">—</dd></div>
+            </dl>
+          </div>
+        </section>
+
+        <section class="panel control-panel">
+          <div class="panel-heading compact-heading">
+            <div><p class="eyebrow">SIMULATION CONTROLS</p><h2>Client devices</h2></div>
+          </div>
+          <div class="control-buttons">
+            <button id="addStudentButton" class="button button-primary" type="button">+ Add student</button>
+            <button id="removeStudentButton" class="button button-secondary" type="button" disabled>Remove selected</button>
+          </div>
+          <p class="control-note">Each client adds its configured traffic demand. Changes are saved to the campus database.</p>
+          <div class="ap-list-heading"><strong>ACCESS POINTS</strong><span id="apListCount">—</span></div>
+          <ul id="apList" class="ap-list"></ul>
+        </section>
+
+        <section class="panel history-panel">
+          <div class="panel-heading compact-heading history-heading">
+            <div><p class="eyebrow">PERSISTED OBSERVATIONS</p><h2>Network load history</h2></div>
+            <strong id="historyCurrent" class="history-current">—</strong>
+          </div>
+          <p id="historyEmpty" class="history-empty">No simulation snapshots yet. Change the network to record the first observation.</p>
+          <svg id="historyChart" class="history-chart" viewBox="0 0 720 170" role="img" aria-label="Historical simulated network utilization"></svg>
+          <div id="historyLabels" class="history-labels"><span>—</span><span>—</span></div>
+          <p class="chart-caption">Timestamped aggregate traffic demand ÷ configured AP capacity.</p>
+        </section>
+      </aside>
+    </div>
+    <footer class="footnote">Simulation only · Signal and capacity values are estimates derived from the documented model.</footer>
+  </main>
+</body>
+</html>
